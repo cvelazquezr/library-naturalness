@@ -1,0 +1,9 @@
+# Files
+.DS_Store
+
+# Folders
+.idea/
+.ipynb_checkpoints/
+data/
+naturalness-data/
+results/
