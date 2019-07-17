@@ -6,4 +6,4 @@
 .ipynb_checkpoints/
 data/
 naturalness-data/
-results/
+__pycache__/

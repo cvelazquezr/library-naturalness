@@ -1,10 +1,11 @@
 import os
 import git
+import pandas as pd
 from shutil import rmtree
 from pydriller import RepositoryMining
 from xml.etree import ElementTree
 from tokenizer import TokeNizer
-import pandas as pd
+from get_entropy import *
 from matplotlib import pyplot as plt
 
 REPOSITORIES_FOLDER = "data/"
@@ -77,7 +78,7 @@ def restore_to_latest_commit(project_path):
 
 
 def analyse_java_files(project_path, number):
-    # Make train files
+    project_name = project_path.split("/")[1]
     code_files = list()
 
     for root, folders, files in os.walk(project_path):
@@ -89,28 +90,17 @@ def analyse_java_files(project_path, number):
                 tokens = ' '.join(token_procedure.get_pure_tokens(code))
                 code_files.append(tokens)
 
-    with open(f"naturalness-data/java/new_data/fold{number}.train", "w") as f:
-        for file_code in code_files:
-            f.writelines(file_code + "\n")
+    path_folder = f"naturalness-data/java/new_data/{project_name}/"
+    if not os.path.exists(path_folder):
+        os.mkdir(path_folder)
 
-
-def analyse_set_files(project_location: str, files: list, number):
-    code_files = list()
-
-    for file in files:
-        if file.endswith('.java'):
-            token_procedure = TokeNizer("Java")
-            code = code_file_to_str(project_location + "/" + file)
-
-            tokens = ' '.join(token_procedure.get_pure_tokens(code))
-            code_files.append(tokens)
-
-    with open(f"naturalness-data/java/new_data/fold{number}.test", "w") as f:
+    with open(f"{path_folder}/fold{number}.train", "w") as f:
         for file_code in code_files:
             f.writelines(file_code + "\n")
 
 
 def make_train_files(project_path: str):
+    print(f"Making train files ...")
     hash_list = list()
     k = 0
 
@@ -118,8 +108,6 @@ def make_train_files(project_path: str):
         if k < 1:
             hash_list.append(commit.hash)
         else:
-            print(f"Making train file {k - 1} ...")
-
             checkout_previous_version(project_path, hash_list[k - 1])
             analyse_java_files(project_path, k - 1)
             hash_list.append(commit.hash)
@@ -130,10 +118,12 @@ def make_train_files(project_path: str):
 
 
 def make_test_files(project_path: str):
+    print(f"Making test files ...")
+
+    project_name = project_path.split("/")[1]
     k = 0
     for commit in RepositoryMining(project_path).traverse_commits():
         if k >= 1:
-            print(f"Making test file for train {k - 1} ...")
             checkout_previous_version(project_path, commit.hash)
             code_files = list()
 
@@ -145,12 +135,9 @@ def make_test_files(project_path: str):
                     tokens = ' '.join(token_procedure.get_pure_tokens(code))
                     code_files.append(tokens)
 
-            with open(f"naturalness-data/java/new_data/test_tokens/{k - 1}.java.tokens", "w") as f:
+            with open(f"naturalness-data/java/new_data/{project_name}/fold{k - 1}.test", "w") as f:
                 for file_code in code_files:
                     f.writelines(file_code + "\n")
-
-            with open(f"naturalness-data/java/new_data/fold{k - 1}.test", "w") as f:
-                f.writelines(f"naturalness-data/java/new_data/test_tokens/{k - 1}.java.tokens" + "\n")
         k += 1
 
     restore_to_latest_commit(project_path)
@@ -186,45 +173,101 @@ def modification_to_str(modification: str):
     return ' '.join(lines_code)
 
 
-def save_repo_information(project_path: str):
-    commits_messages = list()
-    commits_files = list()
-
-    k = 0
+def number_commits(project_path: str):
+    commits = 0
     for commit in RepositoryMining(project_path).traverse_commits():
-        if k > 1:
-            commits_messages.append(commit.msg)
-            files = list()
+        commits += 1
+    return commits
 
-            for modification in commit.modifications:
-                if modification.filename.endswith(".java"):
-                    files.append(modification.filename)
 
-            commits_files.append(" ".join(files))
-        k += 1
+def get_entropy_commit(data_path: str, stopwords: list, number_commits: int):
+    print(f"Getting entropy values ...")
 
-    data = {"message": commits_messages, "files_modified": commits_files}
+    entropy_unigram_list = list()
+    entropy_bigram_list = list()
+
+    for i in range(number_commits):
+        train_file = data_path + "/" + f"fold{i}.train"
+        test_file = data_path + "/" + f"fold{i}.test"
+
+        data_train, data_test = extract_data(train_file, test_file)
+
+        # Cleaning input
+        data_train = preprocess_data(data_train, stopwords)
+        data_test = preprocess_data(data_test, stopwords)
+
+        probabilities_unigram = get_probabilities_unigram(data_train)
+        entropy_unigram = get_entropy_unigram(data_test, data_train, probabilities_unigram)
+        entropy_unigram_list.append(entropy_unigram)
+
+        # print(f"Entropy value for the unigram model: {entropy_unigram}")
+
+        keys_bigram, probabilities_bigram = get_probabilities_bigram(data_train)
+        entropy_bigram = get_entropy_bigram(data_test, data_train, keys_bigram, probabilities_unigram,
+                                            probabilities_bigram)
+        entropy_bigram_list.append(entropy_bigram)
+
+        # print(f"Entropy value for the bigram model: {entropy_bigram}")
+
+    return entropy_unigram_list, entropy_bigram_list
+
+
+def get_reserved_words():
+    reserved_words = list()
+
+    with open("java_words.txt") as f:
+        while True:
+            line = f.readline()
+            if not line:
+                break
+            else:
+                line = line.strip()
+                reserved_words.append(line)
+
+    return reserved_words
+
+
+def save_results_csv(project_path: str, unigram_values: list, bigram_values: list):
+    print("Saving the results ...")
+    RESULTS_FOLDER = "results/entropy/java/"
+
+    data = {'unigram_values': unigram_values, 'bigram_values': bigram_values}
     dataframe = pd.DataFrame(data=data)
-    dataframe.to_csv("results/entropy/java/timestamper-plugin-info.csv", index=False)
+
+    dataframe.to_csv(RESULTS_FOLDER + f"{project_path}.csv")
+
+
+def plot_results(results_path: str, project_name: str):
+    dataframe = pd.read_csv(results_path)
+
+    plt.plot(range(len(dataframe)), dataframe["unigram_values"], ".b-", label="Unigram Model")
+    plt.plot(range(len(dataframe)), dataframe["bigram_values"], ".r-", label="Bigram Model")
+
+    plt.xlabel("Commits")
+    plt.ylabel("Entropy")
+
+    plt.legend()
+    plt.title(project_name)
+    plt.show()
 
 
 if __name__ == '__main__':
-    # projects = list()
-    #
-    # with open(f'{REPOSITORIES_FOLDER}/repositories.txt') as f:
-    #     while True:
-    #         line = f.readline()
-    #         if not line:
-    #             break
-    #         else:
-    #             line = line.strip()
-    #             projects.append(line)
-    #
-    # projects_paths = get_projects(projects)
-    #
-    # with open(f'{REPOSITORIES_FOLDER}/remaining.txt', 'w') as f:
-    #     for path in projects_paths:
-    #         f.writelines(path + "\n")
+    projects = list()
+
+    with open(f'{REPOSITORIES_FOLDER}/repositories.txt') as f:
+        while True:
+            line = f.readline()
+            if not line:
+                break
+            else:
+                line = line.strip()
+                projects.append(line)
+
+    projects_paths = get_projects(projects)
+
+    with open(f'{REPOSITORIES_FOLDER}/remaining.txt', 'w') as f:
+        for path in projects_paths:
+            f.writelines(path + "\n")
 
     projects_poms = list()
 
@@ -237,6 +280,19 @@ if __name__ == '__main__':
                 line = line.strip()
                 projects_poms.append(line)
 
-    # make_train_files(projects_poms[0])
-    # make_test_files(projects_poms[0])
-    save_repo_information(projects_poms[0])
+    reserved = get_reserved_words()
+
+    for project_location in projects_poms:
+        project_name = project_location.split("/")[1]
+        print(f"Analysing project {project_name} ...")
+
+        make_train_files(project_location)
+        make_test_files(project_location)
+
+        commits = number_commits(project_location) - 1
+        unigram_list, bigram_list = get_entropy_commit(f"naturalness-data/java/new_data/{project_name}", reserved, commits)
+        save_results_csv(project_name, unigram_list, bigram_list)
+
+    for project_location in projects_poms:
+        project_name = project_location.split("/")[1]
+        plot_results(f"results/entropy/java/{project_name}.csv", project_name)
