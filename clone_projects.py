@@ -4,6 +4,7 @@ from shutil import rmtree
 from pydriller import RepositoryMining
 from xml.etree import ElementTree
 from tokenizer import TokeNizer
+import pandas as pd
 from matplotlib import pyplot as plt
 
 REPOSITORIES_FOLDER = "data/"
@@ -127,35 +128,29 @@ def make_train_files(project_path: str):
 
     restore_to_latest_commit(project_path)
 
-        # for modification in commit.modifications:
-        #     if modification.filename == 'pom.xml':
-        #         dependencies = analyze_code(modification.source_code)
-        #         print(dependencies, end=" ")
-        # print()
-
 
 def make_test_files(project_path: str):
-
     k = 0
     for commit in RepositoryMining(project_path).traverse_commits():
-        print(f"Making test file {k} ...")
-        checkout_previous_version(project_path, commit.hash)
-        code_files = list()
+        if k >= 1:
+            print(f"Making test file for train {k - 1} ...")
+            checkout_previous_version(project_path, commit.hash)
+            code_files = list()
 
-        for modification in commit.modifications:
-            if modification.filename.endswith(".java"):
-                token_procedure = TokeNizer("Java")
-                code = modification_to_str(modification.source_code)
+            for modification in commit.modifications:
+                if modification.filename.endswith(".java"):
+                    token_procedure = TokeNizer("Java")
+                    code = modification_to_str(modification.source_code)
 
-                tokens = ' '.join(token_procedure.get_pure_tokens(code))
-                code_files.append(tokens)
+                    tokens = ' '.join(token_procedure.get_pure_tokens(code))
+                    code_files.append(tokens)
 
-        with open(f"naturalness-data/java/new_data/test_tokens/{k}.java.tokens", "w") as f:
-            for file_code in code_files:
-                f.writelines(file_code + "\n")
+            with open(f"naturalness-data/java/new_data/test_tokens/{k - 1}.java.tokens", "w") as f:
+                for file_code in code_files:
+                    f.writelines(file_code + "\n")
 
-        with open(f"naturalness-data/java/new_data/fold{k}.test", "w") as f:
-            f.writelines(f"naturalness-data/java/new_data/test_tokens/{k}.java.tokens" + "\n")
+            with open(f"naturalness-data/java/new_data/fold{k - 1}.test", "w") as f:
+                f.writelines(f"naturalness-data/java/new_data/test_tokens/{k - 1}.java.tokens" + "\n")
         k += 1
 
     restore_to_latest_commit(project_path)
@@ -191,6 +186,28 @@ def modification_to_str(modification: str):
     return ' '.join(lines_code)
 
 
+def save_repo_information(project_path: str):
+    commits_messages = list()
+    commits_files = list()
+
+    k = 0
+    for commit in RepositoryMining(project_path).traverse_commits():
+        if k > 1:
+            commits_messages.append(commit.msg)
+            files = list()
+
+            for modification in commit.modifications:
+                if modification.filename.endswith(".java"):
+                    files.append(modification.filename)
+
+            commits_files.append(" ".join(files))
+        k += 1
+
+    data = {"message": commits_messages, "files_modified": commits_files}
+    dataframe = pd.DataFrame(data=data)
+    dataframe.to_csv("results/entropy/java/timestamper-plugin-info.csv", index=False)
+
+
 if __name__ == '__main__':
     # projects = list()
     #
@@ -221,5 +238,5 @@ if __name__ == '__main__':
                 projects_poms.append(line)
 
     # make_train_files(projects_poms[0])
-    make_test_files(projects_poms[0])
-    # plt.show()
+    # make_test_files(projects_poms[0])
+    save_repo_information(projects_poms[0])

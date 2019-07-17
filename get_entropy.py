@@ -3,6 +3,8 @@ import sys
 import time
 import random
 from random import shuffle
+import numpy as np
+import pandas as pd
 from matplotlib import pyplot as plt
 
 
@@ -218,22 +220,34 @@ if __name__ == '__main__':
     # start = time.time()
 
     # Train process
-    # lm_conf = ("KENLM", "/Users/kmilo/Dev/extra/kenlm/build/bin/lmplz")
-    # train("naturalness-data/java/new_data", 452, 3, 1.0, 2, lm_conf)
+    lm_conf = ("KENLM", "/Users/kmilo/Dev/extra/kenlm/build/bin/lmplz")
+    train("naturalness-data/java/new_data", 10, 3, 1.0, 2, lm_conf)
 
     # Write the entropy raw output to file
-    # os.system('python3 cross.py > results/entropy/java/3gramsCache.txt')
+    os.system('python3 cross.py > results/entropy/java/3gramsCache.txt')
 
     # Getting entropies values
     entropy_list = entropy_values("results/entropy/java/3gramsCache.txt")
-    plt.bar(range(len(entropy_list)), entropy_list)
-    plt.show()
+    print(entropy_list)
+    # plt.bar(range(len(entropy_list)), entropy_list)
+    # plt.show()
 
-    # TODO: Replace Nan values for 0
-    # TODO: Make visualization tool to check commits contents vs entropy values
+    # for i in range(len(entropy_list)):
+    #     value = entropy_list[i]
+    #     if np.isnan(value):
+    #         entropy_list[i] = 0.0
+    #
+    # data = {"commit": list(range(1, len(entropy_list) + 1)), "entropy": entropy_list}
+    # dataframe = pd.DataFrame(data=data)
+    #
+    # dataframe_second = pd.read_csv("results/entropy/java/timestamper-plugin-info.csv")
+    # dataframe_final = dataframe.join(dataframe_second)
+    #
+    # dataframe_final.to_csv("results/entropy/java/timestamper-plugin.csv", index=False)
+
     # TODO: Check the entropy values to another project
     # TODO: Calculate the cosine similarity for the projects
-
+    #
     # end = time.time()
     #
     # print(f"Time consumed: {end - start}")
