@@ -138,10 +138,64 @@ def get_entropy_bigram(sentence: list,
     return -1 * sum(entropy_values)
 
 
+def get_probabilities_trigram(data: list):
+    keys = list()
+    probabilities = list()
+
+    for items in data:
+        tokens = items.split()
+        for i in range(len(tokens) - 2):
+            triple = tokens[i] + " " + tokens[i + 1] + " " + tokens[i + 2]
+            keys.append(triple)
+
+    counter_keys = dict(Counter(keys))
+
+    data_join = " ".join(data)
+    data_all_split = data_join.split()
+    counter_names = dict(Counter(data_all_split))
+
+    for key, value in counter_keys.items():
+        probability = value / counter_names[key.split()[0]]
+        probabilities.append(probability)
+
+    return list(counter_keys.keys()), probabilities
+
+
+def get_entropy_trigram(sentence: list,
+                        data: list,
+                        keys: list,
+                        keys_bigram: list,
+                        probabilities_unigram: list,
+                        probabilities_bigram: list,
+                        probabilities_trigram: list):
+
+    data_join = " ".join(data)
+    data_all_split = data_join.split()
+
+    entropy_values = list()
+
+    for items in sentence:
+        tokens = items.split()
+        for i in range(len(tokens) - 2):
+            triple = tokens[i] + " " + tokens[i + 1] + " " + tokens[i + 2]
+            if triple in keys:
+                probability_unigram = probabilities_unigram[data_all_split.index(tokens[i])]
+                probability_bigram = probabilities_bigram[keys_bigram.index(tokens[i] + " " + tokens[i + 1])]
+
+                indices = get_indices(keys, tokens[i])
+                probs_trigram = np.array([probabilities_trigram[index] for index in indices])
+
+                partial_result = probability_unigram * probability_bigram * sum(probs_trigram * np.log2(probs_trigram))
+                entropy_values.append(partial_result)
+            else:
+                entropy_values.append(0)
+    return -1 * sum(entropy_values)
+
+
 if __name__ == '__main__':
     start = time.time()
 
-    data_train, data_test = extract_data("new_train.txt", "new_test.txt")
+    data_train, data_test = extract_data("fold436.train", "fold436.test")
 
     reserved_words = list()
 
@@ -166,6 +220,17 @@ if __name__ == '__main__':
     entropy_bigram = get_entropy_bigram(data_test, data_train, keys_bigram, probabilities_unigram, probabilities_bigram)
 
     print(f"Entropy value for the bigram model: {entropy_bigram}")
+
+    keys_trigram, probabilities_trigram = get_probabilities_trigram(data_train)
+    entropy_trigram = get_entropy_trigram(data_test,
+                                          data_train,
+                                          keys_trigram,
+                                          keys_bigram,
+                                          probabilities_unigram,
+                                          probabilities_bigram,
+                                          probabilities_trigram)
+
+    print(f"Entropy value for the trigram model: {entropy_trigram}")
     end = time.time()
 
-    print(f"Execution time: {(end - start)}")
+    print(f"\nExecution time: {(end - start)}")

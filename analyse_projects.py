@@ -185,6 +185,7 @@ def get_entropy_commit(data_path: str, stopwords: list, number_commits: int):
 
     entropy_unigram_list = list()
     entropy_bigram_list = list()
+    entropy_trigram_list = list()
 
     for i in range(number_commits):
         train_file = data_path + "/" + f"fold{i}.train"
@@ -200,16 +201,26 @@ def get_entropy_commit(data_path: str, stopwords: list, number_commits: int):
         entropy_unigram = get_entropy_unigram(data_test, data_train, probabilities_unigram)
         entropy_unigram_list.append(entropy_unigram)
 
-        # print(f"Entropy value for the unigram model: {entropy_unigram}")
-
         keys_bigram, probabilities_bigram = get_probabilities_bigram(data_train)
-        entropy_bigram = get_entropy_bigram(data_test, data_train, keys_bigram, probabilities_unigram,
+        entropy_bigram = get_entropy_bigram(data_test,
+                                            data_train,
+                                            keys_bigram,
+                                            probabilities_unigram,
                                             probabilities_bigram)
         entropy_bigram_list.append(entropy_bigram)
 
-        # print(f"Entropy value for the bigram model: {entropy_bigram}")
+        keys_trigram, probabilities_trigram = get_probabilities_trigram(data_train)
+        entropy_trigram = get_entropy_trigram(data_test,
+                                              data_train,
+                                              keys_trigram,
+                                              keys_bigram,
+                                              probabilities_unigram,
+                                              probabilities_bigram,
+                                              probabilities_trigram)
 
-    return entropy_unigram_list, entropy_bigram_list
+        entropy_trigram_list.append(entropy_trigram)
+
+    return entropy_unigram_list, entropy_bigram_list, entropy_trigram_list
 
 
 def get_reserved_words():
@@ -227,11 +238,14 @@ def get_reserved_words():
     return reserved_words
 
 
-def save_results_csv(project_path: str, unigram_values: list, bigram_values: list):
+def save_results_csv(project_path: str, unigram_values: list, bigram_values: list, trigram_values: list):
     print("Saving the results ...")
     RESULTS_FOLDER = "results/entropy/java/"
 
-    data = {'unigram_values': unigram_values, 'bigram_values': bigram_values}
+    data = {'unigram_values': unigram_values,
+            'bigram_values': bigram_values,
+            'trigram_values': trigram_values}
+
     dataframe = pd.DataFrame(data=data)
 
     dataframe.to_csv(RESULTS_FOLDER + f"{project_path}.csv")
@@ -242,6 +256,20 @@ def plot_results(results_path: str, project_name: str):
 
     plt.plot(range(len(dataframe)), dataframe["unigram_values"], ".b-", label="Unigram Model")
     plt.plot(range(len(dataframe)), dataframe["bigram_values"], ".r-", label="Bigram Model")
+    plt.plot(range(len(dataframe)), dataframe["trigram_values"], ".g-", label="Trigram Model")
+
+    plt.xlabel("Commits")
+    plt.ylabel("Entropy")
+
+    plt.legend()
+    plt.title(project_name)
+    plt.show()
+
+
+def plot_trigrams(results_path: str, project_name: str):
+    dataframe = pd.read_csv(results_path)
+
+    plt.plot(range(len(dataframe)), dataframe["trigram_values"], ".g-", label="Trigram Model")
 
     plt.xlabel("Commits")
     plt.ylabel("Entropy")
@@ -290,9 +318,17 @@ if __name__ == '__main__':
         make_test_files(project_location)
 
         commits = number_commits(project_location) - 1
-        unigram_list, bigram_list = get_entropy_commit(f"naturalness-data/java/new_data/{project_name}", reserved, commits)
-        save_results_csv(project_name, unigram_list, bigram_list)
+        unigram_list, bigram_list, trigram_list = get_entropy_commit(f"naturalness-data/java/new_data/{project_name}",
+                                                                     reserved,
+                                                                     commits)
+        save_results_csv(project_name, unigram_list, bigram_list, trigram_list)
 
+    # Plot all models
     for project_location in projects_poms:
         project_name = project_location.split("/")[1]
         plot_results(f"results/entropy/java/{project_name}.csv", project_name)
+
+    # Plot only the trigram model
+    for project_location in projects_poms:
+        project_name = project_location.split("/")[1]
+        plot_trigrams(f"results/entropy/java/{project_name}.csv", project_name)
