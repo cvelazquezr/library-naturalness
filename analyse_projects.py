@@ -3,7 +3,6 @@ import git
 import pandas as pd
 from shutil import rmtree
 from pydriller import RepositoryMining
-from xml.etree import ElementTree
 from tokenizer import TokeNizer
 from get_entropy import *
 from matplotlib import pyplot as plt
@@ -37,36 +36,6 @@ def contains_pom_file(project_path: str):
         if files.count('pom.xml'):
             return True
     return False
-
-
-def extract_dependencies(source_code: str):
-    dependencies = list()
-    tree = ElementTree.fromstring(source_code)
-
-    # Analyze properties of the POM file
-    for child in tree:
-        child_tag = child.tag
-        child_tag = child_tag.split('}')[-1]
-
-        if child_tag == "dependencies":
-            for dependency in child:
-                dependency_sentence = ''
-
-                for attribute in dependency:
-                    dependency_sentence += attribute.text + "|"
-
-                dependencies.append(dependency_sentence[:-1])
-
-    return set(dependencies)
-
-
-def analyze_code(source_code: str):
-    if source_code:
-        source = source_code.split('\n')
-        cleaned_lines = [line.strip() for line in source]
-        source = '\n'.join(cleaned_lines)
-
-        return extract_dependencies(source)
 
 
 def checkout_previous_version(project_path, hash_number):
@@ -105,12 +74,12 @@ def make_train_files(project_path: str):
     k = 0
 
     for commit in RepositoryMining(project_path).traverse_commits():
+        hash_list.append(commit.hash)
         if k < 1:
-            hash_list.append(commit.hash)
+            continue
         else:
             checkout_previous_version(project_path, hash_list[k - 1])
             analyse_java_files(project_path, k - 1)
-            hash_list.append(commit.hash)
 
         k += 1
 

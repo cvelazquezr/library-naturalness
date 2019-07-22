@@ -36,7 +36,7 @@ def preprocess_data(data: list, stopwords: list):
         processed = list()
 
         for token in tokens:
-            if token not in stopwords and token.isalpha():
+            if token not in stopwords and token.isalpha() and token[0].islower():
                 processed.append(token)
         processed_data.append(" ".join(processed))
 
